@@ -54,11 +54,11 @@ mnist_tr = datasets.MNIST(root='../MNIST/', download=True, transform=transforms.
 mnist_te = datasets.MNIST(root='../MNIST/', download=True, train=False, transform=transforms.ToTensor())
 tr = torch.utils.data.DataLoader(dataset=mnist_tr,
                                 batch_size=mb_size,
-                                shuffle=True,
+                                shuffle=False,
                                 drop_last=True, **kwargs)
 te = torch.utils.data.DataLoader(dataset=mnist_te,
                                 batch_size=1,
-                                shuffle=True,
+                                shuffle=False,
                                 drop_last=True, **kwargs)
 def loss_V(recon_x, x, mu, std):
     '''loss = reconstruction loss + KL_z + KL_u'''
@@ -156,6 +156,8 @@ def train_opt_vae():
                     torch.zeros(mb_size,50), device).to(device)
     optimizer1 = optim.Adadelta([model.z_mu,model.z_var])
     optimizer2 = optim.Adadelta(model.parameters())
+    zmu_dict = torch.zeros(len(tr),mb_size,50).to(device)
+    zvar_dict = torch.zeros(len(tr),mb_size,50).to(device)
     #optimizer = optim.Adam([model.u,model.glbu],lr=0.1)
     #l2 = lambda epoch: pow((1.-1.*epoch/epochs),0.9)
     scheduler1 = optim.lr_scheduler.CosineAnnealingLR(optimizer1, T_max=10000)
@@ -164,7 +166,7 @@ def train_opt_vae():
         loss_tr = 0.0
         for batch_idx, (data, target) in enumerate(tr):
             data = data.to(device)
-            model.update_z(torch.zeros(data.shape[0],50),torch.zeros(data.shape[0],50))
+            model.update_z(zmu_dict[batch_idx,:,:],zvar_dict[batch_idx,:,:])
             for ite in range(Ite):
                 tr_recon_loss = 0
                 for num in range(mul[ite]):
@@ -176,6 +178,8 @@ def train_opt_vae():
                 scheduler2.step()
                 ls = train(epoch,data,model,optimizer2)
                 loss_tr += ls
+            zmu_dict[batch_idx,:,:] = model.z_mu.data
+            zvar_dict[batch_idx,:,:] = model.z_var.data
         print('====> Epoch: {} Reconstruction loss: {:.4f}'.format(epoch,loss_tr/len(tr)/mb_size/Ite)) 
     return model
 
