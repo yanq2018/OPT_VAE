@@ -138,7 +138,7 @@ Opt
 '''
 #Ite = 5
 #mul = [30,20,10,10,10]
-epochs = 100
+epochs = 500
 def train(epoch,img,model,optimizer):
     model.train()
     data = img.to(device)
@@ -166,7 +166,7 @@ def train_opt_vae():
         for batch_idx, (data, target) in enumerate(tr):
             data = data.to(device)
             model.update_z(zmu_dict[batch_idx,:,:],zvar_dict[batch_idx,:,:])
-            for num in range(20):
+            for num in range(10):
                 scheduler1.step()
                 ls = train(epoch,data,model,optimizer1)
             #print('====> Epoch: {} Index {} Ite {} Reconstruction loss (after updating z): {:.4f}'.format(epoch,batch_idx,ite,
