@@ -136,9 +136,9 @@ for _, (data, target) in enumerate(te):
 '''
 Opt
 '''
-Ite = 5
-mul = [30,20,10,10,10]
-epochs = 20
+#Ite = 5
+#mul = [30,20,10,10,10]
+epochs = 100
 def train(epoch,img,model,optimizer):
     model.train()
     data = img.to(device)
@@ -151,7 +151,6 @@ def train(epoch,img,model,optimizer):
     return loss.item()
 
 def train_opt_vae():
-    #u_init = torch.zeros(mb_size,16,3)
     model = OPT_VAE(h, w, 256, 50, torch.zeros(mb_size,50), 
                     torch.zeros(mb_size,50), device).to(device)
     optimizer1 = optim.Adadelta([model.z_mu,model.z_var])
@@ -167,19 +166,17 @@ def train_opt_vae():
         for batch_idx, (data, target) in enumerate(tr):
             data = data.to(device)
             model.update_z(zmu_dict[batch_idx,:,:],zvar_dict[batch_idx,:,:])
-            for ite in range(Ite):
-                tr_recon_loss = 0
-                for num in range(mul[ite]):
-                    scheduler1.step()
-                    ls = train(epoch,data,model,optimizer1)
-                    tr_recon_loss += ls
-                #print('====> Epoch: {} Index {} Ite {} Reconstruction loss (after updating z): {:.4f}'.format(epoch,batch_idx,ite,
-                #      tr_recon_loss/data.shape[0]/mul[ite]))
-                scheduler2.step()
-                ls = train(epoch,data,model,optimizer2)
-                loss_tr += ls
+            for num in range(20):
+                scheduler1.step()
+                ls = train(epoch,data,model,optimizer1)
+            #print('====> Epoch: {} Index {} Ite {} Reconstruction loss (after updating z): {:.4f}'.format(epoch,batch_idx,ite,
+            #      tr_recon_loss/data.shape[0]/mul[ite]))
+            scheduler2.step()
+            ls = train(epoch,data,model,optimizer2)
+            loss_tr += ls
             zmu_dict[batch_idx,:,:] = model.z_mu.data
             zvar_dict[batch_idx,:,:] = model.z_var.data
-        print('====> Epoch: {} Reconstruction loss: {:.4f}'.format(epoch,loss_tr/len(tr)/mb_size/Ite)) 
+        print('====> Epoch: {} Reconstruction loss: {:.4f}'.format(epoch,loss_tr/len(tr)/mb_size)) 
     return model
 
+model = train_opt_vae()
