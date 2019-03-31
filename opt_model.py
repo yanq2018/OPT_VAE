@@ -26,6 +26,8 @@ class OPT_VAE(nn.Module):
         
         self.z_mu = Variable(z_mu,requires_grad=True)
         self.z_var = Variable(z_var,requires_grad=True)
+        self.z_mu_test = Variable(torch.zeros(1,50).to(device),requires_grad=True)
+        self.z_var_test = Variable(torch.zeros(1,50).to(device),requires_grad=True)
         
         """
         encoder: two fc layers
@@ -46,9 +48,13 @@ class OPT_VAE(nn.Module):
         self.z2h = nn.Linear(z_dim, h_dim)
         self.h2x = nn.Linear(self.h_dim, self.x_dim)
         
-    def update_z(self,z_mu,z_var):
-        self.z_mu.data = z_mu
-        self.z_var.data = z_var
+    def update_z(self,z_mu,z_var,tr):
+        if tr:
+            self.z_mu.data = z_mu
+            self.z_var.data = z_var
+        else:
+            self.z_mu_test.data = z_mu
+            self.z_var_test.data = z_var
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5*logvar)
@@ -60,11 +66,19 @@ class OPT_VAE(nn.Module):
         x = F.sigmoid(self.h2x(h))
         return x
 
-    def forward(self, inputs):
+    def forward(self, inputs, tr):
         
         #z_mu, z_var = self.encode(inputs.view(-1, self.x_dim))
-        z = self.reparameterize(self.z_mu, self.z_var)
-        x = self.decode(z)
-        x = torch.clamp(x, 1e-6, 1-1e-6)
-
-        return x, self.z_mu, self.z_var,z
+        if tr:
+            z = self.reparameterize(self.z_mu, self.z_var)
+            x = self.decode(z)
+            x = torch.clamp(x, 1e-6, 1-1e-6)
+    
+            return x, self.z_mu, self.z_var,z
+        else:
+            tm = inputs.shape[0]
+            z = self.reparameterize(self.z_mu_test.expand(tm,50), self.z_var_test.expand(tm,50))
+            x = self.decode(z)
+            x = torch.clamp(x, 1e-6, 1-1e-6)
+    
+            return x, self.z_mu_test, self.z_var_test,z
