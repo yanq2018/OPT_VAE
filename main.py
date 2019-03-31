@@ -76,6 +76,8 @@ def train_vae():
         model.train()
         tr_recon_loss = 0
         for batch_idx, (data, target) in enumerate(tr):
+            if batch_idx >= tr_size:
+                break
             data = data.to(device)
             optimizer.zero_grad()
     
@@ -94,7 +96,7 @@ def train_vae():
                         recon_loss / len(data),kl/len(data)))
 
         print('====> Epoch: {} Reconstruction loss: {:.4f}'.format(
-                epoch, tr_recon_loss / (len(tr)*mb_size)))
+                epoch, tr_recon_loss / (tr_size*mb_size)))
         test(epoch,model)
     return model
 
@@ -138,12 +140,13 @@ Opt
 '''
 #Ite = 5
 #mul = [30,20,10,10,10]
-epochs = 500
-def train(epoch,img,model,optimizer):
+epochs = 50
+tr_size = 10
+def train(epoch,img,model,optimizer,tr):
     model.train()
     data = img.to(device)
     optimizer.zero_grad()
-    recon,zmu,zvar,z = model(data)
+    recon,zmu,zvar,z = model(data,tr)
     recon_loss, kl = loss_V(recon, data, zmu,torch.exp(0.5*zvar))
     loss = recon_loss +kl 
     loss.backward(retain_graph=True)
@@ -158,25 +161,50 @@ def train_opt_vae():
     zmu_dict = torch.zeros(len(tr),mb_size,50).to(device)
     zvar_dict = torch.zeros(len(tr),mb_size,50).to(device)
     #optimizer = optim.Adam([model.u,model.glbu],lr=0.1)
-    #l2 = lambda epoch: pow((1.-1.*epoch/epochs),0.9)
     scheduler1 = optim.lr_scheduler.CosineAnnealingLR(optimizer1, T_max=10000)
     scheduler2 = optim.lr_scheduler.CosineAnnealingLR(optimizer2, T_max=10000)
     for epoch in range(epochs):
         loss_tr = 0.0
         for batch_idx, (data, target) in enumerate(tr):
+            if batch_idx >= tr_size:
+                break
             data = data.to(device)
-            model.update_z(zmu_dict[batch_idx,:,:],zvar_dict[batch_idx,:,:])
-            for num in range(10):
+            model.update_z(zmu_dict[batch_idx,:,:],zvar_dict[batch_idx,:,:],1)
+            for num in range(20):
                 scheduler1.step()
-                ls = train(epoch,data,model,optimizer1)
+                ls = train(epoch,data,model,optimizer1,1)
             #print('====> Epoch: {} Index {} Ite {} Reconstruction loss (after updating z): {:.4f}'.format(epoch,batch_idx,ite,
             #      tr_recon_loss/data.shape[0]/mul[ite]))
             scheduler2.step()
-            ls = train(epoch,data,model,optimizer2)
+            ls = train(epoch,data,model,optimizer2,1)
             loss_tr += ls
             zmu_dict[batch_idx,:,:] = model.z_mu.data
             zvar_dict[batch_idx,:,:] = model.z_var.data
-        print('====> Epoch: {} Reconstruction loss: {:.4f}'.format(epoch,loss_tr/len(tr)/mb_size)) 
+        print('====> Epoch: {} Reconstruction loss: {:.4f}'.format(epoch,loss_tr/tr_size/mb_size)) 
     return model
 
 model = train_opt_vae()
+
+def test_opt(model,epc):
+    test_recon_loss = 0.0
+    optimizer = optim.Adadelta([model.z_mu_test,model.z_var_test])
+    #l2 = lambda epoch: pow((1.-1.*epoch/epochs/epc),0.9)
+    #scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=l2)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10000)
+    for _, (data, target) in enumerate(te):
+        data = data.to(device)
+        te_size = data.shape[0]
+        model.update_z(torch.zeros(te_size,50).to(device),torch.zeros(te_size,50).to(device),0)
+        for epoch in range(epc):
+            scheduler.step()
+            train(epoch,data,model,optimizer,0)
+        
+        #sample 1000 times from posterior to compute NLL (IWAE paper uses 5000)
+        data = data.expand(3,1,28,28)
+        recon_batch, zmu, zvar,z= model(data,0)
+        NLL = NLL_test_loss(recon_batch, data, zmu, torch.exp(0.5*zvar),z)
+        test_recon_loss += NLL.item()
+            
+    test_recon_loss /= (len(te))
+    print('====> Epoch:{} NLL: {:.4f}'.format(epoch, test_recon_loss))
+    
